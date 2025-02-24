@@ -19,7 +19,6 @@ test.beforeAll(async ({ browser, baseURL }) => {
   // 콘솔 로그를 찍기 위해 필요한 코드입니다.
   page.on('console', msg => console.log(msg))
 
-  // await page.goto(baseURL)
   const pageUrl = baseURL + '/login?returnUrl=%2Fmy%2Fbuying%3Ftab%3Dfinished'
   await page.goto(pageUrl)
 })
@@ -44,8 +43,6 @@ test.describe('구매 내역 페이지', () => {
     while (detailPagesCount < LIMIT) {
       const data = {} as any
 
-      // 판매 내역 수집
-      // await page.waitForTimeout(2000)
       await page.waitForSelector('a.product_list_info_action')
       // <a> 태그 선택
       const anchorElements = await page.locator('a.product_list_info_action')
@@ -139,68 +136,12 @@ test.describe('구매 내역 페이지', () => {
 
         Object.assign(data, labelData)
       }
-
-      // if (closeSelector) {
-      //   const closeButton = await page.locator(closeSelector).elementHandles()
-      //   if (closeButton.length) {
-      //     await closeButton[0].click()
-      //   }
-      // } else {
-      //   await page.goBack()
-      // }
       await page.goBack()
 
       detailPagesCount += 1
       results.push(data)
     }
 
-    // const results = await navigateAndCollectData({
-    //   page,
-    //   selector: '.svg-icon-mapper',
-    //   labelSelector: '.title-labels',
-    //   dataProcessor: node => {
-    //     const element = node as Element
-    //     const pElement = element.querySelectorAll('p')
-    //     const tempData: Record<string, string> = {}
-    //     pElement.forEach((element, index) => {
-    //       const text = element.textContent || ''
-    //       if (index % 2 === 0) {
-    //         if (text) {
-    //           tempData[text] = ''
-    //         }
-    //       } else {
-    //         const key = pElement[index - 1].textContent || ''
-    //         if (key) {
-    //           tempData[key] = text
-    //         }
-    //       }
-    //     })
-    //     return tempData
-    //   },
-    // })
     await saveResultsToFile(results, 'history.json')
   })
-
-  // test('판매 내역 페이지', async ({ baseURL }) => {
-  //   await page.goto(baseURL + '/my/inventory?tab=finished')
-  //   await page.waitForTimeout(3000)
-
-  //   const results = await navigateAndCollectData({
-  //     page,
-  //     selector: '.btn.inventory_actions.outlinegrey.small.detail',
-  //     labelSelector: '.inventory_text_line',
-  //     closeSelector: '.ico-close.icon.sprite-icons',
-  //     dataProcessor: node => {
-  //       const element = node as Element
-  //       const key = element.querySelector('.key')
-  //       const value = element.querySelector('.value')
-  //       const tempData: Record<string, string> = {}
-  //       if (key && value) {
-  //         tempData[key.textContent || ''] = value.textContent || ''
-  //       }
-  //       return tempData
-  //     },
-  //   })
-  //   await saveResultsToFile(results, 'selling_history.json')
-  // })
 })
