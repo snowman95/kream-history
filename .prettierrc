@@ -1,0 +1,26 @@
+{
+  "trailingComma": "all",
+  "tabWidth": 2,
+  "semi": false,
+  "singleQuote": true,
+  "arrowParens": "avoid",
+  "importOrder": [
+    "^@types",
+    "^import type",
+    "^@/pages/(.*)$",
+    "^@/components/(.*)$",
+    "/utils/(.*)$",
+    "^@/(lib|utils)/(.*)$",
+    "^@/(hook|hooks)/(.*)$",
+    "^api/(.*)$",
+    "^@/(generated|graphql)/(.*)$",
+    "^@/(constant|constants)/(.*)$",
+    "^@/envVariables(.*)$",
+    ".*\\.(webp|png|svg)$",
+    ".*\\.css$",
+    "^[./]"
+  ],
+  "importOrderSeparation": true,
+  "importOrderSortSpecifiers": true,
+  "plugins": ["@trivago/prettier-plugin-sort-imports"]
+}

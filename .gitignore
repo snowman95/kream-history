@@ -1,0 +1,7 @@
+node_modules
+.env
+history.csv
+history.json
+history.md
+test-results
+playwright-report
