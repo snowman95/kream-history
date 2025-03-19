@@ -62,7 +62,7 @@ test.describe('구매 내역 페이지', () => {
 
       await lastParagraphElement.click()
 
-      // await page.waitForTimeout(3000)
+      await page.waitForTimeout(3000)
       await page.waitForSelector('span.code_text')
       const codeText = await page.locator('span.code_text').textContent()
       data['코드'] = codeText || ''
@@ -101,6 +101,7 @@ test.describe('구매 내역 페이지', () => {
         break
       }
       await waitForElementAndClick(detailPages[detailPagesCount])
+      await page.waitForTimeout(1000)
       await page.waitForSelector(labelSelector)
       const labels = await page.locator(labelSelector).elementHandles()
       for (const label of labels) {
