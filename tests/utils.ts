@@ -30,9 +30,9 @@ export async function navigateAndCollectData({
     const currentAnchorElement = anchorElements.nth(detailPagesCount)
 
     // 현재 <a> 태그 하위의 마지막 <p> 태그 선택
-    const paragraphElements = await currentAnchorElement.locator(
-      'p.text-lookup.text-element.display_paragraph',
-    )
+    const paragraphElements = await currentAnchorElement
+      .getByRole('paragraph')
+      .locator('.text-lookup.text-element.display_paragraph')
     const lastParagraphElement = paragraphElements.last()
     const text = await lastParagraphElement.textContent()
 
@@ -65,14 +65,13 @@ export async function navigateAndCollectData({
 
     // 구매 내역 수집
     await page.waitForSelector(selector)
-    const detailPages = await page.locator(selector).elementHandles()
-    if (
-      detailPages.length <= detailPagesCount ||
-      !detailPages[detailPagesCount]
-    ) {
+    const detailPages = page.locator(selector)
+
+    if ((await detailPages.count()) <= detailPagesCount) {
       break
     }
-    await waitForElementAndClick(detailPages[detailPagesCount])
+
+    await waitForElementAndClick(detailPages.nth(detailPagesCount))
     await page.waitForSelector(labelSelector)
     const labels = await page.locator(labelSelector).elementHandles()
     for (const label of labels) {
@@ -105,4 +104,61 @@ export async function waitForElementAndClick(elementHandle: any) {
 export async function saveResultsToFile(results: any[], filename: string) {
   const jsonData = JSON.stringify(results, null, 2)
   fs.writeFileSync(filename, jsonData, 'utf-8')
+}
+
+export const getTimeBasedFileName = () => {
+  const now = new Date()
+  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`
+  return `history_${timestamp}.json`
+}
+
+// 데이터를 즉시 파일에 추가
+export const appendResultToFile = (data: any[], filePath: string) => {
+  try {
+    let existingData: any[] = []
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath, 'utf8')
+      if (fileContent) {
+        existingData = JSON.parse(fileContent)
+      }
+    }
+    existingData.push(...data)
+    fs.writeFileSync(filePath, JSON.stringify(existingData, null, 2))
+    console.log(`데이터 ${data.length}건이 ${filePath}에 추가되었습니다.`)
+  } catch (error) {
+    console.error('파일 저장 중 오류 발생:', error)
+  }
+}
+
+// 지연 함수 - 요청 제한 회피를 위한 대기
+export async function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// 랜덤 지연 함수 - 요청 패턴 분산
+export async function randomDelay(minMs: number, maxMs: number): Promise<void> {
+  const delayTime = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs
+  return delay(delayTime)
+}
+
+export async function dynamicScrollingStrategy(page: Page, maxScrolls = 30) {
+  let lastHeight = await page.evaluate(() => document.body.scrollHeight)
+  let scrolls = 0
+
+  while (scrolls < maxScrolls) {
+    scrolls++
+    // 70% 지점으로 스크롤해서 로딩 트리거
+    await page.evaluate(() =>
+      window.scrollTo(0, document.body.scrollHeight * 0.7),
+    )
+    await page.waitForTimeout(1000)
+
+    // 완전히 아래로 스크롤
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await page.waitForTimeout(1500)
+
+    const newHeight = await page.evaluate(() => document.body.scrollHeight)
+    if (newHeight === lastHeight) break
+    lastHeight = newHeight
+  }
 }

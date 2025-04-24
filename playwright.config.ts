@@ -23,13 +23,13 @@ const config: PlaywrightTestConfig = {
   // globalSetup: require.resolve('./global-setup'),
   testDir: '.',
   // 각 테스트가 실행될 수 있는 최대 시간
-  timeout: 5 * 60 * 1000,
+  timeout: 25 * 60 * 1000,
   expect: {
     // expect 함수가 조건을 만족할 때까지 기다리는 최대 시간
     timeout: 10 * 1000,
   },
   /* Run tests in files in parallel */
-  fullyParallel: true,
+  fullyParallel: false, // true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
@@ -63,6 +63,8 @@ const config: PlaywrightTestConfig = {
       name: 'firefox',
       use: {
         ...devices['Desktop Firefox'],
+        userAgent:
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0',
       },
     },
 

@@ -2,17 +2,17 @@
 	"scripts": {
 		"convert": "ts-node convert-csv.ts",
 		"format": "prettier --write .",
-		"test": "export NODE_ENV=development && playwright test -c ./tests/playwright.config.ts",
-		"test:debug": "export NODE_ENV=development && playwright test --debug -c ./tests/playwright.config.ts",
-		"test:trace": "export NODE_ENV=development && playwright test --trace on -c ./tests/playwright.config.ts",
+		"test": "export NODE_ENV=development && playwright test",
+		"test:debug": "export NODE_ENV=development && playwright test --debug",
+		"test:trace": "export NODE_ENV=development && playwright test --trace on",
 		"test:report": "playwright show-report",
 		"run": "pnpm test:debug && pnpm convert"
 	},
 	"dependencies": {
-		"@playwright/test": "^1.50.1",
 		"dotenv": "^16.4.7"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.52.0",
 		"@trivago/prettier-plugin-sort-imports": "^5.2.2",
 		"@types/node": "^22.13.0",
 		"prettier": "^3.4.2",

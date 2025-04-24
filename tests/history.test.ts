@@ -1,148 +1,147 @@
-import { type Page, test } from '@playwright/test'
+import {
+  Browser,
+  BrowserContext,
+  type Page,
+  test as base,
+} from '@playwright/test'
+import * as fs from 'fs'
+import * as path from 'path'
 
-import { saveResultsToFile, waitForElementAndClick } from './utils'
+import { KreamPageObject } from './KreamPageObject'
+import { appendResultToFile, getTimeBasedFileName } from './utils'
 
-let page: Page
-test.describe.configure({ mode: 'serial' })
-
+// 테스트별 고정 변수 정의
 const id = process.env.TEST_CLIENT_ID || ''
 const pwd = process.env.TEST_CLIENT_PWD || ''
-const LIMIT = 20
+const LIMIT = 40
 
-test.beforeAll(async ({ browser, baseURL }) => {
-  if (!baseURL) {
-    test.fail(true, 'playwright.config.ts 에서 baseURL 설정이 필요합니다.')
-    return
-  }
-  page = await browser.newPage()
+// 커스텀 타입 정의
+type KreamFixtures = {
+  kreamPage: KreamPageObject
+  secureContext: BrowserContext
+  securePage: Page
+  browser: Browser
+}
 
-  // 콘솔 로그를 찍기 위해 필요한 코드입니다.
-  page.on('console', msg => console.log(msg))
+// 커스텀 테스트 픽스처 설정
+const test = base.extend<KreamFixtures>({
+  // Cross-Origin 격리 우회를 위한 보안 컨텍스트
+  secureContext: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      bypassCSP: true, // Content Security Policy 우회
+      // 필요한 경우 추가 헤더 설정
+      extraHTTPHeaders: {
+        'Access-Control-Allow-Origin': '*',
+      },
+      // 성능 최적화를 위한 설정
+      viewport: { width: 1280, height: 720 }, // 작은 뷰포트 설정
+      deviceScaleFactor: 1, // 낮은 DPI 설정
+      javaScriptEnabled: true,
+      hasTouch: false,
+    })
 
-  const pageUrl = baseURL + '/login?returnUrl=%2Fmy%2Fbuying%3Ftab%3Dfinished'
-  await page.goto(pageUrl)
+    // 리소스 최적화: 불필요한 리소스 차단
+    await context.route(
+      '**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2}',
+      route => {
+        // 이미지 및 폰트 리소스를 최소화하여 성능 향상
+        route.abort()
+      },
+    )
+
+    await use(context)
+    await context.close()
+  },
+
+  // 보안 컨텍스트에서 생성한 페이지
+  securePage: async ({ secureContext }, use) => {
+    const page = await secureContext.newPage()
+    // page.on('console', msg => {
+    //   console.log(msg)
+    // })
+
+    // 페이지 성능 최적화: 타임아웃 설정
+    page.setDefaultTimeout(10000) // 기본 타임아웃 10초
+    page.setDefaultNavigationTimeout(15000) // 네비게이션 타임아웃 15초
+
+    await use(page)
+  },
+
+  // 페이지 객체 확장
+  kreamPage: async ({ securePage }, use) => {
+    // 페이지 객체 생성
+    const kreamPage = new KreamPageObject(securePage)
+
+    await use(kreamPage)
+  },
 })
 
-test.describe('구매 내역 페이지', () => {
-  test('로그인', async () => {
-    const email = page.locator('input[type="email"]')
-    await email.fill(id)
+test.describe('KREAM 구매 내역 페이지', () => {
+  test('구매 내역 수집', async ({ securePage, kreamPage }) => {
+    const result: any[] = []
 
-    const password = page.locator('input[type="password"]')
-    await password.fill(pwd)
-    const loginButton = page.locator('button[type="submit"].btn.full.solid')
-    await loginButton.click()
-  })
+    // 로그인
+    await kreamPage.login(id, pwd)
 
-  test('구매 내역 페이지', async () => {
-    const selector = '.svg-icon-mapper'
-    const labelSelector = '.title-labels'
-    const results = []
-    let detailPagesCount = 0
+    await test.step('구매 내역 데이터 수집', async () => {
+      await securePage.waitForTimeout(1000) // 새 항목이 로드될 시간 기다림
+      // 스크롤하여 더 많은 상품 로드
+      for (let i = 0; i < LIMIT / 2; i++) {
+        // await dynamicScrollingStrategy(securePage)
+        await securePage.evaluate(() => {
+          window.scrollBy(0, window.innerHeight)
+        })
+        await securePage.waitForTimeout(200) // 새 항목이 로드될 시간 기다림
+      }
 
-    while (detailPagesCount < LIMIT) {
-      const data = {} as any
+      const orderList = await securePage.locator('div.my-order-list > a')
+      const totalCount = await orderList.count()
+      console.log('totalCount: ', totalCount)
+      const collectBuyingData: string[] = []
+      const inventoryUrlList: string[] = []
 
-      await page.waitForSelector('a.product_list_info_action')
-      // <a> 태그 선택
-      const anchorElements = await page.locator('a.product_list_info_action')
-      const currentAnchorElement = anchorElements.nth(detailPagesCount)
+      for (let i = 0; i < totalCount; i += 2) {
+        const inventoryLocator = await orderList
+          .nth(i + 1)
+          .locator('a', { hasText: '창고보관' })
 
-      // 현재 <a> 태그 하위의 마지막 <p> 태그 선택
-      const paragraphElements = await currentAnchorElement.locator(
-        'p.text-lookup.text-element.display_paragraph',
+        const isVisible = await inventoryLocator.isVisible()
+        if (isVisible) {
+          // 화살표
+          const myOrderUrl = (await orderList.nth(i).getAttribute('href')) || ''
+          const inventoryUrl =
+            (await inventoryLocator.getAttribute('href')) || ''
+
+          if (myOrderUrl) collectBuyingData.push(myOrderUrl)
+          if (inventoryUrl) inventoryUrlList.push(inventoryUrl)
+        }
+      }
+
+      console.log('collectBuyingData 개수: ', collectBuyingData.length)
+      console.log('inventoryUrlList 개수: ', inventoryUrlList.length)
+      const 가져올개수 = Math.min(
+        collectBuyingData.length,
+        inventoryUrlList.length,
+        LIMIT,
       )
-      const lastParagraphElement = paragraphElements.last()
-      const text = await lastParagraphElement.textContent()
+      console.log('가져올개수: ', 가져올개수)
 
-      if (text === '구매거부') {
-        detailPagesCount += 1
-        continue
-      }
-
-      await lastParagraphElement.click()
-
-      await page.waitForTimeout(3000)
-      await page.waitForSelector('span.code_text')
-      const codeText = await page.locator('span.code_text').textContent()
-      data['코드'] = codeText || ''
-
-      const layerContent = await page.locator('.layer_content').last()
-      await layerContent.waitFor()
-      const inventories = await page
-        .locator('.inventory_text_line')
-        .elementHandles()
-
-      for (const inventory of inventories) {
-        const labelData = await inventory.evaluate(node => {
-          const element = node as Element
-          const key = element.querySelector('.key')
-          const value = element.querySelector('.value')
-          const keyText = key?.textContent || ''
-          const valueText = value?.textContent || ''
-          // keyText가 빈 문자열이 아닌 경우에만 객체를 반환
-          if (keyText && keyText !== ' ') {
-            return { [keyText.trim()]: valueText.trim() }
-          }
-          return {} // 빈 객체 반환
-        })
-
-        Object.assign(data, labelData)
-      }
-      await page.goBack()
-
-      // 구매 내역 수집
-      await page.waitForSelector(selector)
-      const detailPages = await page.locator(selector).elementHandles()
-      if (
-        detailPages.length <= detailPagesCount ||
-        !detailPages[detailPagesCount]
-      ) {
-        break
-      }
-      await waitForElementAndClick(detailPages[detailPagesCount])
-      await page.waitForTimeout(1000)
-      await page.waitForSelector(labelSelector)
-      const labels = await page.locator(labelSelector).elementHandles()
-      for (const label of labels) {
-        const labelData = await label.evaluate(node => {
-          const element = node as Element
-          const pElement = element.querySelectorAll('p')
-          const tempData: Record<string, string> = {}
-          pElement.forEach((element, index) => {
-            const text = element.textContent?.trim() || ''
-            if (index % 2 === 0) {
-              if (text) {
-                tempData[text] = ''
-              }
-            } else {
-              const key = pElement[index - 1].textContent || ''
-              if (key) {
-                tempData[key] = text
-              }
-            }
-          })
-          return tempData
-        })
-
-        const layoutListVertical = await page.locator('.layout_list_vertical')
-        const layoutListVerticalCount = await layoutListVertical.count()
-        const layoutListVerticalElement = await layoutListVertical.nth(
-          layoutListVerticalCount - 1,
+      for (let i = 0; i < 가져올개수; i++) {
+        const labelData = await kreamPage.collectOrderData(collectBuyingData[i])
+        const inventoryData = await kreamPage.collectInventoryData(
+          inventoryUrlList[i],
         )
-        const layoutListVerticalData =
-          await layoutListVerticalElement.locator('p')
-        const target = layoutListVerticalData.last()
-        data['결제수단'] = await target.textContent()
-
-        Object.assign(data, labelData)
+        result.push({ ...inventoryData, ...labelData })
       }
-      await page.goBack()
+      // 시간 기반 파일명 생성
+      const timeBasedFileName = getTimeBasedFileName()
+      const historyFilePath = path.join(process.cwd(), timeBasedFileName)
 
-      detailPagesCount += 1
-      results.push(data)
-    }
-
-    await saveResultsToFile(results, 'history.json')
+      // 빈 배열로 파일 초기화
+      fs.writeFileSync(historyFilePath, JSON.stringify([], null, 2))
+      console.log(`데이터 수집을 시작합니다. 저장 파일: ${historyFilePath}`)
+      appendResultToFile(result, historyFilePath)
+    })
   })
 })
