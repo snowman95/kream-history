@@ -108,11 +108,19 @@ test.describe('KREAM 구매 내역 페이지', () => {
       }
 
       // "창고보관" 링크 추출
-      const inventoryUrlList = await orderList
-        .locator('a')
-        .locator('a', { hasText: '창고보관' })
+      const inventoryUrlList = await orderList.locator(
+        'a.product_list_info_action',
+      )
       for (let i = 0; i < (await inventoryUrlList.count()); i++) {
-        const inventoryUrl = await inventoryUrlList.nth(i).getAttribute('href')
+        const isCanceled = await inventoryUrlList.nth(i).getByText(/취소완료/)
+        if (await isCanceled.isVisible()) {
+          inventoryUrls.push('canceled')
+          continue
+        }
+        const inventoryUrl = await inventoryUrlList
+          .nth(i)
+          .locator('a', { hasText: '창고보관' })
+          .getAttribute('href')
         if (inventoryUrl) inventoryUrls.push(inventoryUrl)
       }
 
@@ -135,6 +143,11 @@ test.describe('KREAM 구매 내역 페이지', () => {
         const inventories: InventoryData[] = []
         for (let j = 0; j < 상품개수; j++) {
           if (inventoryIndex >= inventoryUrls.length) break
+          if (inventoryUrls[inventoryIndex] === 'canceled') {
+            inventoryIndex++
+
+            continue
+          }
           const inventoryData = await kreamPage.collectInventoryData(
             inventoryUrls[inventoryIndex],
           )
@@ -142,8 +155,10 @@ test.describe('KREAM 구매 내역 페이지', () => {
           inventoryIndex++
         }
 
-        // order 정보와 해당 inventories를 묶어서 저장
-        result.push({ orderData, inventories })
+        // order 정보와 해당 inventories를 묶어서 저장. 상품이 1개 이상 있어야만 저장함.
+        if (inventories.length >= 1) {
+          result.push({ orderData, inventories })
+        }
       }
       // 시간 기반 파일명 생성
       const timeBasedFileName = getTimeBasedFileName()
