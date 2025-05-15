@@ -8,12 +8,13 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 import { KreamPageObject } from './KreamPageObject'
+import type { InventoryData, KreamData } from './type'
 import { appendResultToFile, getTimeBasedFileName } from './utils'
 
 // 테스트별 고정 변수 정의
 const id = process.env.TEST_CLIENT_ID || ''
 const pwd = process.env.TEST_CLIENT_PWD || ''
-const LIMIT = 40
+const LIMIT = 50
 
 // 커스텀 타입 정의
 type KreamFixtures = {
@@ -79,7 +80,7 @@ const test = base.extend<KreamFixtures>({
 
 test.describe('KREAM 구매 내역 페이지', () => {
   test('구매 내역 수집', async ({ securePage, kreamPage }) => {
-    const result: any[] = []
+    const result: KreamData[] = []
 
     // 로그인
     await kreamPage.login(id, pwd)
@@ -95,44 +96,54 @@ test.describe('KREAM 구매 내역 페이지', () => {
         await securePage.waitForTimeout(200) // 새 항목이 로드될 시간 기다림
       }
 
-      const orderList = await securePage.locator('div.my-order-list > a')
-      const totalCount = await orderList.count()
-      console.log('totalCount: ', totalCount)
-      const collectBuyingData: string[] = []
-      const inventoryUrlList: string[] = []
+      const orderUrls: string[] = []
+      const inventoryUrls: string[] = []
 
-      for (let i = 0; i < totalCount; i += 2) {
-        const inventoryLocator = await orderList
-          .nth(i + 1)
-          .locator('a', { hasText: '창고보관' })
-
-        const isVisible = await inventoryLocator.isVisible()
-        if (isVisible) {
-          // 화살표
-          const myOrderUrl = (await orderList.nth(i).getAttribute('href')) || ''
-          const inventoryUrl =
-            (await inventoryLocator.getAttribute('href')) || ''
-
-          if (myOrderUrl) collectBuyingData.push(myOrderUrl)
-          if (inventoryUrl) inventoryUrlList.push(inventoryUrl)
-        }
+      // "주문 상세" 링크 추출
+      const orderList = await securePage.locator('div.my-order-list')
+      const orderUrlList = await orderList.locator('.text-header-checkout')
+      for (let i = 0; i < (await orderUrlList.count()); i++) {
+        const orderUrl = await orderUrlList.nth(i).getAttribute('href')
+        if (orderUrl) orderUrls.push(orderUrl)
       }
 
-      console.log('collectBuyingData 개수: ', collectBuyingData.length)
-      console.log('inventoryUrlList 개수: ', inventoryUrlList.length)
-      const 가져올개수 = Math.min(
-        collectBuyingData.length,
-        inventoryUrlList.length,
+      // "창고보관" 링크 추출
+      const inventoryUrlList = await orderList
+        .locator('a')
+        .locator('a', { hasText: '창고보관' })
+      for (let i = 0; i < (await inventoryUrlList.count()); i++) {
+        const inventoryUrl = await inventoryUrlList.nth(i).getAttribute('href')
+        if (inventoryUrl) inventoryUrls.push(inventoryUrl)
+      }
+
+      const 가져올주문개수 = Math.min(
+        orderUrls.length,
+        inventoryUrls.length,
         LIMIT,
       )
-      console.log('가져올개수: ', 가져올개수)
+      console.log('발견된 주문 개수: ', orderUrls.length)
+      console.log('발견된 상품 개수: ', inventoryUrls.length)
+      console.log('거기서 가져올 주문 개수: ', 가져올주문개수)
 
-      for (let i = 0; i < 가져올개수; i++) {
-        const labelData = await kreamPage.collectOrderData(collectBuyingData[i])
-        const inventoryData = await kreamPage.collectInventoryData(
-          inventoryUrlList[i],
-        )
-        result.push({ ...inventoryData, ...labelData })
+      let inventoryIndex = 0
+      for (let i = 0; i < 가져올주문개수; i++) {
+        const orderUrl = orderUrls[i]
+        const orderData = await kreamPage.collectOrderData(orderUrl)
+        const 상품개수 = orderData['상품 개수']
+
+        // 이 order에 해당하는 inventory들을 모음
+        const inventories: InventoryData[] = []
+        for (let j = 0; j < 상품개수; j++) {
+          if (inventoryIndex >= inventoryUrls.length) break
+          const inventoryData = await kreamPage.collectInventoryData(
+            inventoryUrls[inventoryIndex],
+          )
+          inventories.push(inventoryData)
+          inventoryIndex++
+        }
+
+        // order 정보와 해당 inventories를 묶어서 저장
+        result.push({ orderData, inventories })
       }
       // 시간 기반 파일명 생성
       const timeBasedFileName = getTimeBasedFileName()

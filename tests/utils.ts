@@ -1,6 +1,8 @@
 import { type Page, test } from '@playwright/test'
 import fs from 'fs'
 
+import type { KreamData } from './type'
+
 interface NavigateAndCollectDataOptions {
   page: Page
   selector: string
@@ -101,11 +103,6 @@ export async function waitForElementAndClick(elementHandle: any) {
   await elementHandle.click()
 }
 
-export async function saveResultsToFile(results: any[], filename: string) {
-  const jsonData = JSON.stringify(results, null, 2)
-  fs.writeFileSync(filename, jsonData, 'utf-8')
-}
-
 export const getTimeBasedFileName = () => {
   const now = new Date()
   const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`
@@ -113,9 +110,9 @@ export const getTimeBasedFileName = () => {
 }
 
 // 데이터를 즉시 파일에 추가
-export const appendResultToFile = (data: any[], filePath: string) => {
+export const appendResultToFile = (data: KreamData[], filePath: string) => {
   try {
-    let existingData: any[] = []
+    let existingData: KreamData[] = []
     if (fs.existsSync(filePath)) {
       const fileContent = fs.readFileSync(filePath, 'utf8')
       if (fileContent) {
